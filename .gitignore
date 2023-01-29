@@ -103,3 +103,5 @@ dist
 # TernJS port file
 .tern-port
 
+# -AUTHOR ADDED- Auto.js Pro project manifest
+project.json
