@@ -1,5 +1,5 @@
 {
-  "name": "mcauthsvr",
+  "name": "node-mcauthsvr",
   "version": "1.0.0",
   "description": "A NPM Package to start a Yggdrasil API server both authserver and sessionserver9!",
   "main": "main.js",
