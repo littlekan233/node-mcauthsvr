@@ -1,15 +1,16 @@
-const fastify = require("fastify")({
-    logger: true
-});
-const sql = require("sqlite3");
-const server = {
+var fastify = require("fastify");
+const os = require("os");
+const path = require("path");
+const { format } = require("winston");
+const cmdProcess = require("lib/terminal");
+const svrmodule = {
     auth: require("./server/auth"),
     skin: require("./server/skin"),
     web: require("./server/web"),
     webapi: require("./server/webapi")
 };
 const default_config = {
-    address: "0.0.0.0",
+    address: "::", // Value "::" can listening both IPv4 and IPv6.
     port: 80,
     paths: {
         auth: "/auth/",
@@ -17,7 +18,8 @@ const default_config = {
         web: "/",
         webapi: "/wapi/"
     },
-    sql: "#USERDIR#/_mcauthsvr/users.sql",
+    datapath: path.join(os.homedir(), "_mcauthsvr"),
+    sql: "users.sql",
     meta: {
         serverName: "My Yggdrasil API server",
         links: {
@@ -25,48 +27,113 @@ const default_config = {
             register: "http:\/\/localhost:"+port+"\/register\/"
         },
         skinDomains: ["localhost:"+port]
+    },
+    ssl: {
+        enable: false,
+        properties:{
+            key: "",
+            cert: ""
+        }
     }
 };
 
 export default {
-    run(config = default_config){
-        fastify.log.info("Initializing server config...");
+    start(config = default_config){
+        var consuming = 0;
+        const logger = require("lib/logger")(config.datapath);
+        var interval = setInterval(consuming++, 1);
+        logger.info("Initializing server config...");
         config.meta.implementationName = "node-mcauthsvr";
         config.meta.implementationVersion = "1.0.0";
+        const sqlpath = path.join(config.datapath, config.sql);
+        let server;
+        if(config.ssl.enable){
+            server = fastify({ 
+                https: {
+                    key: config.ssl.properties.key,
+                    cert: config.ssl.properties.cert,
+                }
+            });
+        }else{
+            logger.warn("IF YOU ARE DOING LOCAL DEBUG, PLEASE IGNORE IT.");
+            logger.warn("You are not using SSL for this server. ");
+            logger.warn("It is easy for hackers to steal the user's email address and password, resulting in irreversible consequences.");
+            server = fastify();
+        }
         
-        fastify.log.info("Registering server kernel...");
-        fastify.log.info("[1/4] authserver/sessionserver");
-        fastify.register(server.auth, {
-            path: config.paths.auth | default_config.paths.auth,
-            sql: config.sql | default_config.sql
+        logger.info("Registering server kernel...");
+        logger.info("[1/4] authserver/sessionserver");
+        server.register(svrmodule.auth, {
+            path: config.paths.auth,
+            sql: sqlpath
         });
-        fastify.log.info("[2/4] skin/cape texture");
-        fastify.register(server.skin, {
-            path: config.paths.skin | default_config.paths.skin,
-            sql: config.sql | default_config.sql
+        logger.info("[2/4] skin/cape texture");
+        server.register(svrmodule.skin, {
+            path: config.paths.skin,
+            sql: sqlpath
         });
-        fastify.log.info("[3/4] Website (UI)");
-        fastify.register(server.web, {
-            path: config.paths.web | default_config.paths.web,
-            pathapi: config.paths.wapi | default_config.paths.wapi
+        logger.info("[3/4] Website (UI)");
+        server.register(svrmodule.web, {
+            path: config.paths.web,
+            pathapi: config.paths.wapi
         });
-        fastify.log.info("[4/4] Website (API)");
-        fastify.register(server.webapi, {
-            path: config.paths.wapi | default_config.paths.wapi,
-            sql: config.sql | default_config.sql
+        logger.info("[4/4] Website (API)");
+        server.register(svrmodule.webapi, {
+            path: config.paths.wapi,
+            sql: sqlpath
         });
-        fastify.log.info("All server kernel registered and ready.");
+        logger.info("All server kernel registered and ready.");
         
-        fastify.log.info("Starting server...");
-        fastify.listen(config.port | default_config.port, config.address | default_config.address, (err, addr) => {
+        logger.info("Starting server...");
+        server.listen({port: config.port, host: config.address}, (err, addr) => {
             if(err){
-                fastify.log.error("Server is crashed! ");
-                fastify.log.error("--- ! CRASH REPORT START ! ---");
-                fastify.log.error("CRASH EVENT: Server starting");
-                fastify.log.error(err);
-                fastify.log.error("--- ! CRASH REPORT END ! ---");
-                fastify.log.error(`This report is saved at `);
+                logger.error("Server is crashed! ");
+                logger.error("--- ! CRASH INFORMATION START ! ---");
+                logger.error("CRASH EVENT: Server starting");
+                logger.error(err);
+                logger.error("--- ! CRASH INFORMATION END ! ---");
+                logger.error(`Log saved at "${path.join(config.datapath, "logs", `${format.timestamp({ format: "YYYY-MM-DD_HH-mm-ss" })}.log`)}".`);
+                process.exit(1);
             }
-        })
+            clearInterval(interval);
+            interval = undefined;
+            logger.info(`Succesfully started! Time consuming: ${consuming}ms(${consuming/1000}s).`);
+            this.cmd(server, config, logger);
+        });
+    },
+    stop(server, logger, restart = false){
+        logger.info("Stopping server...");
+        server.close();
+        if(!restart){
+            logger.info("Stopped! Bye!");
+            process.exit();
+        }
+        logger.info("Stopped! Ready to restart!")
+    },
+    restart(server, config, logger){
+        this.stop(server, logger, true);
+        logger.info("Restarting...");
+        this.start(config);
+        logger.info("Successfully restarted! ");
+    },
+    async cmd(server, config, logger){
+        logger.info("Type \"help\" for more information.");
+        while(true){
+            var command = prompt("[mcauthsvrCommand] root@mcauthsvr # ");
+            var retmsg = await cmdProcess(command, server, config, logger);
+            switch(retmsg){
+                case "§RESTART§":
+                    this.restart(server, config, logger);
+                    break;
+                case "§STOP§":
+                    this.stop(server, config);
+                    break;
+                case "〓INVALID〓":
+                    logger.error("This command is invalid. Please check it.");
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 };
