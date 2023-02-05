@@ -1,8 +1,8 @@
 var fastify = require("fastify");
 const os = require("os");
 const path = require("path");
-const { format } = require("winston");
-const cmdProcess = require("lib/terminal");
+const cmdProcess = require("./lib/terminal");
+const plapi = require("./plugin/api");
 const svrmodule = {
     auth: require("./server/auth"),
     skin: require("./server/skin"),
@@ -23,8 +23,8 @@ const default_config = {
     meta: {
         serverName: "My Yggdrasil API server",
         links: {
-            homepage: "http:\/\/localhost:"+port+"\/",
-            register: "http:\/\/localhost:"+port+"\/register\/"
+            homepage: "http:\/\/localhost:"+this.port+this.path.web,
+            register: "http:\/\/localhost:"+this.port+this.path.web+"register\/"
         },
         skinDomains: ["localhost:"+port]
     },
@@ -40,7 +40,8 @@ const default_config = {
 export default {
     start(config = default_config){
         var consuming = 0;
-        const logger = require("lib/logger")(config.datapath);
+        var safeMode = false;
+        const logger = require("./lib/logger")(config.datapath);
         var interval = setInterval(consuming++, 1);
         logger.info("Initializing server config...");
         config.meta.implementationName = "node-mcauthsvr";
@@ -83,6 +84,12 @@ export default {
             sql: sqlpath
         });
         logger.info("All server kernel registered and ready.");
+        logger.info("Starting PluginAPI to load 3rd party plugins...");
+        const initRet = plapi._init(server, config, logger);
+        if(typeof initRet == "object" && initRet.code == 403){
+            logger.error("Can't load plugin API module! Starting safe mode...");
+            safeMode = true;
+        }
         
         logger.info("Starting server...");
         server.listen({port: config.port, host: config.address}, (err, addr) => {
@@ -92,12 +99,11 @@ export default {
                 logger.error("CRASH EVENT: Server starting");
                 logger.error(err);
                 logger.error("--- ! CRASH INFORMATION END ! ---");
-                logger.error(`Log saved at "${path.join(config.datapath, "logs", `${format.timestamp({ format: "YYYY-MM-DD_HH-mm-ss" })}.log`)}".`);
                 process.exit(1);
             }
             clearInterval(interval);
             interval = undefined;
-            logger.info(`Succesfully started! Time consuming: ${consuming}ms(${consuming/1000}s).`);
+            logger.info(`Succesfully started on ${addr}! Time consuming: ${consuming}ms (${consuming/1000}s).`);
             this.cmd(server, config, logger);
         });
     },
@@ -108,7 +114,7 @@ export default {
             logger.info("Stopped! Bye!");
             process.exit();
         }
-        logger.info("Stopped! Ready to restart!")
+        logger.info("Stopped! Ready to restart!");
     },
     restart(server, config, logger){
         this.stop(server, logger, true);
@@ -116,11 +122,11 @@ export default {
         this.start(config);
         logger.info("Successfully restarted! ");
     },
-    async cmd(server, config, logger){
+    cmd(server, config, logger){
         logger.info("Type \"help\" for more information.");
         while(true){
-            var command = prompt("[mcauthsvrCommand] root@mcauthsvr # ");
-            var retmsg = await cmdProcess(command, server, config, logger);
+            var command = prompt("[root@mcauthsvr] r# ");
+            var retmsg = cmdProcess(command, server, config, logger);
             switch(retmsg){
                 case "§RESTART§":
                     this.restart(server, config, logger);
