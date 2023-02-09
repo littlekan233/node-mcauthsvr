@@ -37,8 +37,8 @@ const default_config = {
     }
 };
 
-export default {
-    start(config = default_config){
+module.exports = class {
+    constructor(config = default_config){
         var consuming = 0;
         var safeMode = false;
         const logger = require("./lib/logger")(config.datapath);
@@ -106,8 +106,8 @@ export default {
             logger.info(`Succesfully started on ${addr}! Time consuming: ${consuming}ms (${consuming/1000}s).`);
             this.cmd(server, config, logger);
         });
-    },
-    stop(server, logger, restart = false){
+    }
+    static stop(server, logger, restart = false){
         logger.info("Stopping server...");
         server.close();
         if(!restart){
@@ -115,14 +115,14 @@ export default {
             process.exit();
         }
         logger.info("Stopped! Ready to restart!");
-    },
-    restart(server, config, logger){
+    }
+    static restart(server, config, logger){
         this.stop(server, logger, true);
         logger.info("Restarting...");
         this.start(config);
         logger.info("Successfully restarted! ");
-    },
-    cmd(server, config, logger){
+    }
+    static cmd(server, config, logger){
         logger.info("Type \"help\" for more information.");
         while(true){
             var command = prompt("[root@mcauthsvr] r# ");
