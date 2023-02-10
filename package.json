@@ -25,6 +25,6 @@
   },
   "exports":{
     ".":"./main.js",
-    "./plugin-api":"./plugin/api.js"
+    "./*":"./exports/*.js"
   }
 }

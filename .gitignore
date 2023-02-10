@@ -105,3 +105,9 @@ dist
 
 # -AUTHOR ADDED- Auto.js Pro project manifest
 project.json
+.lightly
+.c_bin
+.classes
+node_modules
+dist-ssr
+*.local

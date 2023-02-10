@@ -11,11 +11,11 @@ const internal = require("./internal");
 module.exports = {
     _loadPlugin(){
         if(plugins){
-            logger.error("[PluginAPI] A plugin was trying to run system function, but access denied.");
+            logger.error("[PluginAPI] Load plugins failed: Plugins already loaded.");
             return {
                 code: 403,
                 msg: "Access denied",
-                desc: "Can't run Plugin API system function."
+                desc: "Plugins already loaded."
             };
         }
         logger.info(`[PluginAPI] Loaded ${plugins.length} plugin(s): `);
